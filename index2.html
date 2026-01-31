@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Log In</title>
+  <style>
+    :root{
+      --bg1: #f6f8fa;
+      --card: #ffffff;
+      --accent: #2563eb; /* blue-600 */
+      --muted: #64748b;
+      --success: #10b981;
+      --danger: #ef4444;
+      --shadow: 0 6px 20px rgba(2,6,23,0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      background: linear-gradient(180deg,#eef2ff 0%,var(--bg1) 100%);
+      color:#0f172a;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    .wrap{
+      min-height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:32px;
+      box-sizing:border-box;
+    }
+
+    .card{
+      width:100%;
+      max-width:420px;
+      background:var(--card);
+      border-radius:12px;
+      box-shadow:var(--shadow);
+      padding:28px;
+      box-sizing:border-box;
+      border: 1px solid rgba(15,23,42,0.04);
+    }
+
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-bottom:18px;
+    }
+
+    .logo {
+      width:46px;
+      height:46px;
+      border-radius:10px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      color:white;
+      background: linear-gradient(135deg,#4f46e5,#06b6d4); /* purple to teal */
+      font-weight:700;
+      font-size:18px;
+      box-shadow: 0 4px 12px rgba(79,70,229,0.18);
+    }
+
+    h1{
+      font-size:18px;
+      margin:0;
+      line-height:1;
+    }
+    p.lead{
+      margin:6px 0 18px 0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    form .field{
+      margin-bottom:14px;
+    }
+
+    label{
+      display:block;
+      font-size:13px;
+      margin-bottom:6px;
+      color:#0f172a;
+      font-weight:600;
+    }
+
+    input[type="text"],
+    input[type="password"]{
+      width:100%;
+      padding:10px 12px;
+      border-radius:8px;
+      border:1px solid rgba(2,6,23,0.08);
+      background: #fbfdff;
+      outline:none;
+      font-size:15px;
+      box-sizing:border-box;
+      transition:box-shadow .12s, border-color .12s, transform .06s;
+    }
+
+    input:focus{
+      border-color: rgba(37,99,235,0.9);
+      box-shadow: 0 6px 18px rgba(37,99,235,0.08);
+      transform: translateY(-1px);
+    }
+
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+
+    .toggle-pass{
+      background:none;
+      border:none;
+      color:var(--muted);
+      font-weight:600;
+      font-size:13px;
+      cursor:pointer;
+      padding:6px 8px;
+      border-radius:8px;
+    }
+
+    .actions{
+      margin-top:8px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+    }
+
+    button.primary{
+      background: linear-gradient(90deg,var(--accent),#06b6d4);
+      color:white;
+      border:none;
+      padding:10px 14px;
+      border-radius:10px;
+      font-weight:600;
+      cursor:pointer;
+      box-shadow: 0 8px 26px rgba(37,99,235,0.12);
+      transition:transform .08s, box-shadow .08s;
+    }
+
+    button.primary:active{ transform:translateY(1px) }
+    button.primary[disabled]{
+      opacity:0.6;
+      cursor:not-allowed;
+      box-shadow:none;
+      transform:none;
+    }
+
+    .muted{
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .error{
+      color:var(--danger);
+      font-size:13px;
+      margin-top:6px;
+    }
+
+    .note{
+      margin-top:14px;
+      font-size:13px;
+      color:var(--muted);
+      text-align:center;
+    }
+
+    .password-strength{
+      height:8px;
+      background:#eef2ff;
+      border-radius:8px;
+      overflow:hidden;
+      margin-top:8px;
+    }
+    .password-strength > i{
+      display:block;
+      height:100%;
+      width:0%;
+      background:linear-gradient(90deg,#ef4444,#f97316,#10b981);
+      transition:width .18s;
+    }
+
+    @media (max-width:420px){
+      .card{ padding:18px; border-radius:10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <main class="card" aria-labelledby="login-heading">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">UA</span>
+        <div>
+          <h1 id="login-heading">Sign in to your account</h1>
+          <p class="lead">Simple, secure authentication — enter your credentials below.</p>
+        </div>
+      </div>
+
+      <form id="loginForm" action="login.php" method="POST" novalidate>
+        <div class="field">
+          <label for="username">Username</label>
+          <input autocomplete="username" id="username" name="username" type="text" inputmode="text" placeholder="you@example.com or username" required />
+          <div id="userError" class="error" role="alert" aria-live="polite" hidden></div>
+        </div>
+
+        <div class="field">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label for="password">Password</label>
+            <button type="button" class="toggle-pass muted" id="togglePassword" aria-pressed="false">Show</button>
+          </div>
+          <input autocomplete="current-password" id="password" name="password" type="password" placeholder="••••••••" minlength="6" required />
+          <div class="password-strength" aria-hidden="true"><i id="pwdBar"></i></div>
+          <div id="passError" class="error" role="alert" aria-live="polite" hidden></div>
+        </div>
+
+        <div class="actions">
+          <div class="muted"><label style="display:flex;align-items:center;gap:6px;font-weight:500;"><input id="remember" name="remember" type="checkbox" /> Remember</label></div>
+          <div><a class="muted" href="#" onclick="event.preventDefault();alert('Implement password reset server-side');">Forgot?</a></div>
+        </div>
+
+        <div style="margin-top:16px; display:flex; gap:8px; align-items:center;">
+          <button id="submitBtn" class="primary" type="submit">Log In</button>
+          <div class="muted" style="font-size:13px;">or <a href="#" onclick="event.preventDefault();alert('Implement sign-up flow');">create account</a></div>
+        </div>
+
+        <div class="note">This page uses client-side validation only. Server-side checks are still required.</div>
+      </form>
+    </main>
+  </div>
+
+  <script>
+    (function(){
+      const form = document.getElementById('loginForm');
+      const username = document.getElementById('username');
+      const password = document.getElementById('password');
+      const userError = document.getElementById('userError');
+      const passError = document.getElementById('passError');
+      const submitBtn = document.getElementById('submitBtn');
+      const togglePassword = document.getElementById('togglePassword');
+      const pwdBar = document.getElementById('pwdBar');
+
+      function setError(el, msg){
+        if(!msg){ el.hidden = true; el.textContent = ''; return; }
+        el.hidden = false; el.textContent = msg;
+      }
+
+      function passwordStrengthScore(pw){
+        if(!pw) return 0;
+        let score = 0;
+        if(pw.length >= 6) score += 1;
+        if(pw.length >= 10) score += 1;
+        if(/[A-Z]/.test(pw)) score += 1;
+        if(/[0-9]/.test(pw)) score += 1;
+        if(/[^A-Za-z0-9]/.test(pw)) score += 1;
+        return Math.min(score,5);
+      }
+
+      function updatePwdBar(){
+        const s = passwordStrengthScore(password.value);
+        const pct = (s/5)*100;
+        pwdBar.style.width = pct + '%';
+        if(s <= 1) pwdBar.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
+        else if(s <= 3) pwdBar.style.background = 'linear-gradient(90deg,#f97316,#f59e0b)';
+        else pwdBar.style.background = 'linear-gradient(90deg,#60a5fa,#10b981)';
+      }
+
+      password.addEventListener('input', () => {
+        setError(passError, '');
+        updatePwdBar();
+      });
+
+      username.addEventListener('input', () => setError(userError, ''));
+
+      togglePassword.addEventListener('click', () => {
+        const showing = password.type === 'text';
+        password.type = showing ? 'password' : 'text';
+        togglePassword.textContent = showing ? 'Show' : 'Hide';
+        togglePassword.setAttribute('aria-pressed', String(!showing));
+      });
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        let ok = true;
+
+        const userVal = username.value.trim();
+        const passVal = password.value;
+
+        if(!userVal){
+          setError(userError, 'Please enter your username or email.');
+          ok = false;
+        } else if(userVal.length < 2){
+          setError(userError, 'Username is too short.');
+          ok = false;
+        } else {
+          setError(userError, '');
+        }
+
+        if(!passVal){
+          setError(passError, 'Please enter your password.');
+          ok = false;
+        } else if(passVal.length < 6){
+          setError(passError, 'Password must be at least 6 characters.');
+          ok = false;
+        } else {
+          setError(passError, '');
+        }
+
+        if(!ok){
+          // focus the first error field for accessibility
+          if(userError.hidden === false) username.focus();
+          else if(passError.hidden === false) password.focus();
+          return;
+        }
+
+        // disable button to prevent double submits and show minimal feedback
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in...';
+
+        // If you want to actually submit to server, remove below block and call form.submit()
+        // Simulate a short delay then submit:
+        setTimeout(() => {
+          // uncomment the next line to perform a real submit to the action URL
+          // form.submit();
+
+          // For demo without server: re-enable and show message
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Log In';
+          alert('Demo only: form validated client-side. Implement server-side authentication.');
+        }, 700);
+      });
+
+      // initialize visual bar
+      updatePwdBar();
+    })();
+  </script>
+</body>
+</html>
