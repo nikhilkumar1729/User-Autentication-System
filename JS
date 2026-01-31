@@ -1,0 +1,80 @@
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+
+const app = express();
+app.use(bodyParser.json());
+
+const JWT_SECRET = 'replace_with_strong_secret';
+const ACCESS_TTL = '15m';
+const REFRESH_TTL = '7d';
+const users = new Map(); 
+const refreshTokens = new Map(); 
+
+function generateAccessToken(user) {
+  return jwt.sign({ sub: user.id, email: user.email }, JWT_SECRET, { expiresIn: ACCESS_TTL });
+}
+
+function generateRefreshToken() {
+  return crypto.randomBytes(40).toString('hex');
+}
+
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  if (users.has(email)) return res.status(409).json({ error: 'user exists' });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = { id: crypto.randomUUID(), email, passwordHash, verified: true }; // set verified true for demo
+  users.set(email, user);
+  return res.status(201).json({ message: 'registered' });
+}
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  const user = users.get(email);
+  if (!user) return res.status(401).json({ error: 'invalid credentials' });
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) return res.status(401).json({ error: 'invalid credentials' });
+
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken();
+  const expiresAt = Date.now() + 7 * 24 * 3600 * 1000; // 7 days
+  refreshTokens.set(refreshToken, { userId: user.id, expiresAt });
+
+  res.json({ accessToken, refreshToken, expiresIn: ACCESS_TTL }
+app.post('/api/auth/refresh', (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).json({ error: 'no token' });
+  const entry = refreshTokens.get(refreshToken);
+  if (!entry || entry.expiresAt < Date.now()) return res.status(401).json({ error: 'invalid refresh token' });
+
+  
+  refreshTokens.delete(refreshToken);
+  const newRefreshToken = generateRefreshToken();
+  refreshTokens.set(newRefreshToken, { userId: entry.userId, expiresAt: Date.now() + 7 * 24 * 3600 * 1000 });
+
+  
+  const user = Array.from(users.values()).find(u => u.id === entry.userId);
+  if (!user) return res.status(401).json({ error: 'user not found' });
+
+  const accessToken = generateAccessToken(user);
+  res.json({ accessToken, refreshToken: newRefreshToken });
+});
+
+
+app.get('/api/me', (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'missing token' });
+  const token = auth.slice('Bearer '.length);
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    return res.json({ user: { id: payload.sub, email: payload.email } });
+  } catch (err) {
+    return res.status(401).json({ error: 'invalid token' });
+  }
+});
+
+app.listen(3000, () => console.log('Auth demo listening on :3000'));
