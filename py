@@ -235,3 +235,4 @@ def reset_password(token: str = Body(...), new_password: str = Body(..., min_len
 @app.get("/api/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user_token)):
     return UserOut(id=current_user.id, email=current_user.email, is_verified=current_user.is_verified)
+def me(current_user: User = Depends(get_current_user_token)):
