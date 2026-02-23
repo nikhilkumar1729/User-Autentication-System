@@ -1,0 +1,125 @@
+package main
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+var jwtKey = []byte("my_secret_key")
+
+// User model (in-memory for demo)
+type User struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+var users = make(map[string]string)
+
+// Claims structure
+type Claims struct {
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
+func main() {
+	r := gin.Default()
+
+	r.POST("/register", Register)
+	r.POST("/login", Login)
+	r.GET("/protected", AuthMiddleware(), Protected)
+
+	r.Run(":8080")
+}
+
+// ---------------- REGISTER ----------------
+func Register(c *gin.Context) {
+	var user User
+
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	// Hash password
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+
+	users[user.Username] = string(hashedPassword)
+
+	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
+}
+
+// ---------------- LOGIN ----------------
+func Login(c *gin.Context) {
+	var user User
+
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	storedPassword, exists := users[user.Username]
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(user.Password))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Wrong password"})
+		return
+	}
+
+	expirationTime := time.Now().Add(5 * time.Minute)
+
+	claims := &Claims{
+		Username: user.Username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString(jwtKey)
+
+	c.JSON(http.StatusOK, gin.H{"token": tokenString})
+}
+
+// ---------------- MIDDLEWARE ----------------
+func AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+		tokenString := c.GetHeader("Authorization")
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "No token provided"})
+			c.Abort()
+			return
+		}
+
+		claims := &Claims{}
+
+		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+			return jwtKey, nil
+		})
+
+		if err != nil || !token.Valid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.Abort()
+			return
+		}
+
+		c.Set("username", claims.Username)
+		c.Next()
+	}
+}
+
+// ---------------- PROTECTED ROUTE ----------------
+func Protected(c *gin.Context) {
+	username, _ := c.Get("username")
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Welcome " + username.(string),
+	})
+}
