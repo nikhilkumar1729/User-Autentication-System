@@ -1,0 +1,187 @@
+import uuid
+import logging
+from typing import Generator
+
+from fastapi import FastAPI, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, Integer, String, Float
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+
+
+DATABASE_URL = "sqlite:///./payments.db"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+Base = declarative_base()
+
+
+def get_db() -> Generator:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer)
+    product_name = Column(String)
+    amount = Column(Float)
+    status = Column(String, default="pending")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer)
+    payment_intent_id = Column(String, unique=True)
+    amount = Column(Float)
+    currency = Column(String, default="usd")
+    status = Column(String, default="created")
+
+
+
+class OrderCreate(BaseModel):
+    user_id: int
+    product_name: str
+    amount: float
+
+
+class PaymentCreate(BaseModel):
+    order_id: int
+    amount: float
+    currency: str = "usd"
+
+
+class PaymentWebhook(BaseModel):
+    payment_intent_id: str
+
+
+
+app = FastAPI(title="Single File Payment Backend")
+
+Base.metadata.create_all(bind=engine)
+
+
+
+
+@app.post("/orders/")
+def create_order(order: OrderCreate, db: Session = Depends(get_db)):
+    new_order = Order(
+        user_id=order.user_id,
+        product_name=order.product_name,
+        amount=order.amount,
+        status="pending"
+    )
+
+    db.add(new_order)
+    db.commit()
+    db.refresh(new_order)
+
+    logger.info(f"Order created: {new_order.id}")
+
+    return {
+        "id": new_order.id,
+        "status": new_order.status
+    }
+
+
+@app.get("/orders/{order_id}")
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(Order).filter(Order.id == order_id).first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    return {
+        "id": order.id,
+        "product_name": order.product_name,
+        "amount": order.amount,
+        "status": order.status
+    }
+
+
+
+@app.post("/payments/")
+def create_payment(payment: PaymentCreate, db: Session = Depends(get_db)):
+
+    order = db.query(Order).filter(Order.id == payment.order_id).first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.status == "paid":
+        raise HTTPException(status_code=400, detail="Order already paid")
+
+    
+    payment_intent_id = "pi_" + str(uuid.uuid4())
+
+    new_payment = Payment(
+        order_id=payment.order_id,
+        payment_intent_id=payment_intent_id,
+        amount=payment.amount,
+        currency=payment.currency,
+        status="pending"
+    )
+
+    db.add(new_payment)
+    db.commit()
+    db.refresh(new_payment)
+
+    logger.info(f"Payment created: {new_payment.payment_intent_id}")
+
+    return {
+        "payment_intent_id": new_payment.payment_intent_id,
+        "status": new_payment.status
+    }
+
+
+@app.post("/payments/webhook/")
+def confirm_payment(webhook: PaymentWebhook, db: Session = Depends(get_db)):
+
+    payment = db.query(Payment).filter(
+        Payment.payment_intent_id == webhook.payment_intent_id
+    ).first()
+
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    payment.status = "succeeded"
+
+    order = db.query(Order).filter(Order.id == payment.order_id).first()
+    order.status = "paid"
+
+    db.commit()
+
+    logger.info(f"Payment confirmed: {payment.payment_intent_id}")
+
+    return {
+        "message": "Payment successful",
+        "order_id": order.id,
+        "order_status": order.status
+    }
+
+
+
+@app.get("/")
+def root():
+    return {"message": "Payment backend running successfully"}
