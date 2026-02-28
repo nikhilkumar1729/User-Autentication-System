@@ -1,0 +1,112 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+var jwtSecret = []byte("super_secret_key")
+
+// In-memory user store (Replace with DB in real project)
+var users = map[string]string{} // email -> hashed password
+
+// Request structures
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func main() {
+	http.HandleFunc("/register", registerHandler)
+	http.HandleFunc("/login", loginHandler)
+	http.Handle("/protected", authMiddleware(http.HandlerFunc(protectedHandler)))
+
+	fmt.Println("Server started at :8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+// Register User
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	var req RegisterRequest
+	json.NewDecoder(r.Body).Decode(&req)
+
+	if _, exists := users[req.Email]; exists {
+		http.Error(w, "User already exists", http.StatusBadRequest)
+		return
+	}
+
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	users[req.Email] = string(hashedPassword)
+
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte("User registered successfully"))
+}
+
+// Login User
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	var req LoginRequest
+	json.NewDecoder(r.Body).Decode(&req)
+
+	hashedPassword, exists := users[req.Email]
+	if !exists {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(req.Password))
+	if err != nil {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": req.Email,
+		"exp":   time.Now().Add(time.Hour * 2).Unix(),
+	})
+
+	tokenString, _ := token.SignedString(jwtSecret)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": tokenString,
+	})
+}
+
+// Middleware
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		tokenString := r.Header.Get("Authorization")
+		if tokenString == "" {
+			http.Error(w, "Missing token", http.StatusUnauthorized)
+			return
+		}
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Protected Route
+func protectedHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Welcome to protected route!"))
+}
