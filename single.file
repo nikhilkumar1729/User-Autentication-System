@@ -1,0 +1,140 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/mux"
+	"golang.org/x/crypto/bcrypt"
+	_ "github.com/go-sql-driver/mysql"
+)
+
+var jwtKey = []byte("my_secret_key")
+
+type User struct {
+	ID       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type Claims struct {
+	Email string `json:"email"`
+	jwt.RegisteredClaims
+}
+
+var db *sql.DB
+
+func initDB() {
+	var err error
+	db, err = sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/authdb")
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// Register User
+func Register(w http.ResponseWriter, r *http.Request) {
+	var user User
+	json.NewDecoder(r.Body).Decode(&user)
+
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), 14)
+
+	_, err := db.Exec("INSERT INTO users(email, password) VALUES(?, ?)",
+		user.Email, hashedPassword)
+
+	if err != nil {
+		http.Error(w, "User already exists", http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	fmt.Println("User Registered")
+}
+
+// Login User
+func Login(w http.ResponseWriter, r *http.Request) {
+	var user User
+	var storedPassword string
+
+	json.NewDecoder(r.Body).Decode(&user)
+
+	err := db.QueryRow("SELECT password FROM users WHERE email=?",
+		user.Email).Scan(&storedPassword)
+
+	if err != nil {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedPassword),
+		[]byte(user.Password))
+
+	if err != nil {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	expirationTime := time.Now().Add(1 * time.Hour)
+
+	claims := &Claims{
+		Email: user.Email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString(jwtKey)
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": tokenString,
+	})
+}
+
+// Middleware
+func AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		tokenStr := r.Header.Get("Authorization")
+
+		claims := &Claims{}
+		token, err := jwt.ParseWithClaims(tokenStr, claims,
+			func(token *jwt.Token) (interface{}, error) {
+				return jwtKey, nil
+			})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Protected Route
+func Dashboard(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Welcome to Protected Dashboard"))
+}
+
+func main() {
+
+	initDB()
+
+	r := mux.NewRouter()
+
+	r.HandleFunc("/register", Register).Methods("POST")
+	r.HandleFunc("/login", Login).Methods("POST")
+
+	protected := r.PathPrefix("/api").Subrouter()
+	protected.Use(AuthMiddleware)
+	protected.HandleFunc("/dashboard", Dashboard).Methods("GET")
+
+	fmt.Println("Server started at :8080")
+	log.Fatal(http.ListenAndServe(":8080", r))
+}
